@@ -1,1 +1,279 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>4x4 Slot Machine - Wild Feature</title>
+  <style>
+    body {
+      background-color: #111;
+      color: #fff;
+      font-family: sans-serif;
+      text-align: center;
+      padding-top: 30px;
+    }
+    .reels {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .reel {
+      width: 100px;
+      height: 400px;
+      overflow: hidden;
+      border: 4px solid #ffd700;
+      border-radius: 10px;
+      position: relative;
+      background: #000;
+    }
+    .reel-track {
+      position: absolute;
+      top: 0;
+      left: 0;
+      /* Will-change added for smoother animation */
+      will-change: transform;
+      transition: transform 1s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .reel img {
+      display: block;
+      width: 100%;
+      height: 100px;
+      object-fit: contain;
+    }
+    .reel img[src*="s10.png"],
+    .reel img[src*="s11.png"] {
+      filter: drop-shadow(0 0 8px #00ffcc);
+    }
+    button {
+      padding: 12px 36px;
+      font-size: 18px;
+      background: linear-gradient(45deg, #ffa500, #ffcc00);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px #cc8a00;
+    }
+    button:active {
+      box-shadow: none;
+      transform: translateY(4px);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+    #bigWinText {
+      display: none;
+      position: fixed;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      background: gold;
+      color: red;
+      padding: 20px 40px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px #fff;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>
+    <img src="logo.png" alt="Buffalo Gold Logo" style="width: 300px; height: auto;" />
+  </h1>
+
+  <div class="reels" id="reels"></div>
+
+  <div id="bigWinText">🎉 BIG WIN! 🎉</div>
+
+  <button id="spinBtn" disabled>Loading...</button>
+
+  <script>
+    const reelCount = 4;
+    const visible = 4;
+    const reelsEl = document.getElementById('reels');
+    const spinBtn = document.getElementById('spinBtn');
+    let finishedReels = 0;
+
+    // Image lists
+    const baseImages = Array.from({ length: 16 }, (_, i) => `s${i + 1}.webp`);
+    const wildImages = ['s17.webp', 's18.webp'];
+
+    // Preload all images to avoid animation showing blank spots
+    function preloadImages(sources, callback) {
+      let loaded = 0;
+      sources.forEach(src => {
+        const img = new Image();
+        img.onload = () => {
+          loaded++;
+          if (loaded === sources.length) callback();
+        };
+        img.onerror = () => {
+          // Still count error as loaded to avoid hang
+          loaded++;
+          if (loaded === sources.length) callback();
+        };
+        img.src = src;
+      });
+    }
+
+    // Force match chance and variables
+    const MATCH_CHANCE = 0.05;
+    let forceMatchStartAt = -1;
+    let sameSymbol = '';
+
+    // After preload, initialize reels
+    function initReels() {
+      reelsEl.innerHTML = '';
+
+      // Decide if we force a match this spin
+      if (Math.random() < MATCH_CHANCE) {
+        forceMatchStartAt = Math.random() < 0.5 ? 0 : 1;
+        const allSymbols = [...baseImages, ...wildImages];
+        sameSymbol = allSymbols[Math.floor(Math.random() * allSymbols.length)];
+      } else {
+        forceMatchStartAt = -1;
+        sameSymbol = '';
+      }
+
+      for (let r = 0; r < reelCount; r++) {
+        const reel = document.createElement('div');
+        reel.className = 'reel';
+        const track = document.createElement('div');
+        track.className = 'reel-track';
+
+        // Compose reel images
+        const reelImages = [...baseImages];
+        wildImages.forEach(wild => {
+          if (Math.random() < 0.2) {
+            reelImages.push(wild);
+          }
+        });
+
+        const shuffled = shuffleArray(reelImages);
+
+        // Repeat the symbols 4 times vertically for smooth looping
+        for (let i = 0; i < 4; i++) {
+          shuffled.forEach(src => {
+            const img = document.createElement('img');
+            img.src = src;
+            track.appendChild(img);
+          });
+        }
+
+        // If forced match, set the bottom visible image on target reels
+        if (r >= forceMatchStartAt && r < forceMatchStartAt + 3) {
+          const imgs = track.querySelectorAll('img');
+          // We want to replace the visible bottom symbol (index visible-1) in one set of repeated symbols
+          // Since repeated 4 times, pick the 3rd set's bottom image for better chance (index = 3 * length_of_symbols + visible-1)
+          const symbolsPerSet = shuffled.length;
+          const targetIndex = 3 * symbolsPerSet + (visible - 1);
+          if (imgs[targetIndex]) imgs[targetIndex].src = sameSymbol;
+        }
+
+        reel.appendChild(track);
+        reelsEl.appendChild(reel);
+      }
+
+      spinBtn.textContent = 'SPIN';
+      spinBtn.disabled = false;
+    }
+
+    function shuffleArray(array) {
+      const shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
+
+    function checkBigWin() {
+      const bigWinText = document.getElementById('bigWinText');
+      const reels = document.querySelectorAll('.reel-track');
+      const slotHeight = 100;
+      const row4Images = [];
+
+      reels.forEach(track => {
+        const matrix = window.getComputedStyle(track).transform;
+        let offsetY = 0;
+        if (matrix !== 'none') {
+          const translateY = parseFloat(matrix.split(',')[5]);
+          offsetY = -translateY;
+        }
+        const imgs = track.querySelectorAll('img');
+        const imageIndex = Math.floor(offsetY / slotHeight) + (visible - 1);
+        row4Images.push(imgs[imageIndex % imgs.length]?.src);
+      });
+
+      const isWild = src => src.includes('s10.png') || src.includes('s11.png');
+      const reference = row4Images.find(src => !isWild(src));
+
+      if (reference) {
+        const allMatchOrWild = row4Images.every(src => src === reference || isWild(src));
+        if (allMatchOrWild) {
+          bigWinText.style.display = 'block';
+          setTimeout(() => bigWinText.style.display = 'none', 3000);
+        }
+      }
+    }
+
+    function spin() {
+      const reels = document.querySelectorAll('.reel-track');
+      finishedReels = 0;
+      spinBtn.disabled = true;
+
+      reels.forEach((track, index) => {
+        const delay = index * 300;
+        setTimeout(() => {
+          const extraTurns = Math.floor(Math.random() * 2) + 2;
+          const imgHeight = 100;
+          // Calculate offset so forced symbols land visible if any
+          let off = 0;
+          if (forceMatchStartAt !== -1 && index >= forceMatchStartAt && index < forceMatchStartAt + 3) {
+            // Make sure the forced symbol (placed at 3rd repeated set) shows at bottom visible row
+            const symbolsPerSet = track.children.length / 4; // 4 repeats
+            off = ((3 * symbolsPerSet) + (visible - 1)) * imgHeight;
+          } else {
+            off = (track.children.length * extraTurns + Math.floor(Math.random() * track.children.length)) * imgHeight;
+          }
+
+          track.style.transition = 'transform 2s cubic-bezier(0.25, 1, 0.5, 1)';
+          track.style.willChange = 'transform';
+          track.style.transform = `translateY(-${off}px)`;
+
+          track.addEventListener('transitionend', function reset() {
+            const totalHeight = track.children.length * imgHeight;
+            const finalOffset = off % totalHeight;
+            track.style.transition = 'none';
+            track.style.transform = `translateY(-${finalOffset}px)`;
+            track.style.willChange = 'auto';
+            track.removeEventListener('transitionend', reset);
+
+            finishedReels++;
+            if (finishedReels === reelCount) {
+              checkBigWin();
+              spinBtn.disabled = false;
+            }
+          }, { once: true });
+        }, delay);
+      });
+    }
+
+    // Start preload and initialize
+    const allImages = [...baseImages, ...wildImages];
+
+    preloadImages(allImages, () => {
+      initReels();
+    });
+
+    spinBtn.onclick = spin;
+  </script>
+
+</body>
+</html>
